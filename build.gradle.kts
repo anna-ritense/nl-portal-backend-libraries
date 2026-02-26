@@ -75,7 +75,7 @@ jreleaser {
         }
     }
     signing {
-        active = Active.ALWAYS
+        active = Active.NEVER
         pgp {
             armored = true
         }
@@ -91,9 +91,20 @@ jreleaser {
 
     deploy {
         maven {
+            github {
+                register("github-packages") {
+                    active.set(org.jreleaser.model.Active.ALWAYS)
+                    url.set("https://maven.pkg.github.com/anna-ritense/nl-portal-backend-libraries")
+                    snapshotSupported.set(true)
+                    subprojects.filter { it.name !in projectsExcludedFromPublish }.forEach { project ->
+                        stagingRepository(project.layout.buildDirectory.dir(sonatypeCentralStagingDir).get().asFile.path)
+                    }
+                }
+            }
+
             mavenCentral {
                 register("sonatype") {
-                    active.set(org.jreleaser.model.Active.RELEASE)
+                    active.set(org.jreleaser.model.Active.NEVER)
                     url.set("https://central.sonatype.com/api/v1/publisher")
                     subprojects.filter { it.name !in projectsExcludedFromPublish }.forEach { project ->
                         stagingRepository(project.layout.buildDirectory.dir(sonatypeCentralStagingDir).get().asFile.path)
@@ -103,7 +114,7 @@ jreleaser {
 
             nexus2 {
                 register("snapshot-deploy") {
-                    active.set(org.jreleaser.model.Active.SNAPSHOT)
+                    active.set(org.jreleaser.model.Active.NEVER)
                     snapshotUrl.set("https://central.sonatype.com/repository/maven-snapshots/")
                     applyMavenCentralRules.set(true)
                     snapshotSupported.set(true)
