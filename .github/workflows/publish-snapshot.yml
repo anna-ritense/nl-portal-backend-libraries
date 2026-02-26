@@ -15,6 +15,9 @@ on:
                 type: string
 jobs:
     build-and-publish:
+        permissions:
+            contents: read
+            packages: write
         env:
             JAVA_VERSION: ${{ inputs.javaVersion }}
             ARTIFACT_VERSION: ${{ inputs.artifactVersion }}
@@ -34,7 +37,10 @@ jobs:
                 # Most likely because JReleaser does not declare a Gradle dependency from `jreleaserdeploy` to `publish`
                 run: ./gradlew publish -Pversion=${{env.ARTIFACT_VERSION}} --stacktrace && ./gradlew jreleaserDeploy -Pversion=${{env.ARTIFACT_VERSION}} --stacktrace
                 env:
-                    TOKEN: ${{ secrets.TOKEN }}
                     JRELEASER_DEPLOY_MAVEN_GITHUB_USERNAME: ${{ github.actor }}
-                    JRELEASER_DEPLOY_MAVEN_GITHUB_TOKEN: ${{ secrets.TOKEN }}
-                    JRELEASER_GITHUB_TOKEN: ${{ secrets.TOKEN }}
+                    JRELEASER_DEPLOY_MAVEN_GITHUB_TOKEN: ${{ github.token }}
+                    JRELEASER_DEPLOY_MAVEN_GITHUB_PASSWORD: ${{ github.token }}
+                    JRELEASER_DEPLOY_MAVEN_GITHUB_GITHUB_PACKAGES_TOKEN: ${{ github.token }}
+                    JRELEASER_DEPLOY_MAVEN_GITHUB_GITHUB_PACKAGES_PASSWORD: ${{ github.token }}
+                    JRELEASER_GITHUB_TOKEN: ${{ github.token }}
+                    JRELEASER_GITHUB_PASSWORD: ${{ github.token }}
