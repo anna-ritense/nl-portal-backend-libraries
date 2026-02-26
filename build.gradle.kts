@@ -1,6 +1,7 @@
 import io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension
 import io.spring.gradle.dependencymanagement.org.codehaus.plexus.interpolation.os.Os.FAMILY_MAC
 import org.apache.tools.ant.taskdefs.condition.Os
+import org.gradle.api.GradleException
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 import org.jreleaser.model.Active
@@ -221,6 +222,55 @@ tasks.register<HtmlDependencyReportTask>("htmlDependencyReport")
 tasks.named<HtmlDependencyReportTask>("htmlDependencyReport") {
     projects = project.allprojects
     reports.html.outputLocation = file("build/reports/project/dependencies")
+}
+
+tasks.register("publishWithRetry") {
+    group = "publishing"
+    description = "Publishes artifacts and deploys with JReleaser using retries for transient failures."
+
+    doLast {
+        val deployTarget = providers.gradleProperty("deployTarget").orElse("github-packages").get()
+        val maxAttempts = providers.gradleProperty("deployRetryMaxAttempts").orElse("3").get().toInt()
+        val baseDelaySeconds = providers.gradleProperty("deployRetryDelaySeconds").orElse("20").get().toInt()
+        val versionValue = project.version.toString()
+
+        val jreleaserArgs = when (deployTarget) {
+            "github-packages" -> listOf("--deployer=github", "--deployer-name=github-packages")
+            else -> throw GradleException("Unsupported deployTarget '$deployTarget'. Supported values: github-packages")
+        }
+
+        val gradlew = if (System.getProperty("os.name").lowercase().contains("windows")) "gradlew.bat" else "./gradlew"
+
+        fun runGradle(args: List<String>): Int {
+            val result = exec {
+                isIgnoreExitValue = true
+                commandLine(listOf(gradlew) + args)
+            }
+            return result.exitValue
+        }
+
+        val publishExit = runGradle(listOf("publish", "-Pversion=$versionValue", "--stacktrace"))
+        if (publishExit != 0) {
+            throw GradleException("publish failed with exit code $publishExit")
+        }
+
+        for (attempt in 1..maxAttempts) {
+            logger.lifecycle("Running jreleaserDeploy (attempt {}/{}) for deployTarget='{}'...", attempt, maxAttempts, deployTarget)
+            val deployExit = runGradle(listOf("jreleaserDeploy") + jreleaserArgs + listOf("-Pversion=$versionValue", "--stacktrace"))
+            if (deployExit == 0) {
+                logger.lifecycle("jreleaserDeploy succeeded on attempt {}.", attempt)
+                return@doLast
+            }
+
+            if (attempt == maxAttempts) {
+                throw GradleException("jreleaserDeploy failed after $maxAttempts attempts")
+            }
+
+            val sleepSeconds = baseDelaySeconds * attempt
+            logger.lifecycle("jreleaserDeploy failed on attempt {}. Retrying in {} seconds...", attempt, sleepSeconds)
+            Thread.sleep(sleepSeconds * 1000L)
+        }
+    }
 }
 
 tasks.bootJar {
